@@ -5,6 +5,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
+    from datetime import datetime
     ## Preparación de archivos
     
     gpsFilenameP = proyecto +"/"+gpsFilename
@@ -86,18 +87,25 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     #modo = "Auto"
 
     ## Procesar timestamp, convertir a un valor en segundos basados en el mes
-
-    gpsPoints['time']=gpsPoints['time'].astype('string')
-    gpsPoints['ano']= gpsPoints['time'].str.slice(0,4,1).astype(float)
-    gpsPoints['mes']= gpsPoints['time'].str.slice(5,7,1).astype(float)
-    gpsPoints['dia']= gpsPoints['time'].str.slice(8,10,1).astype(float)
-    gpsPoints['hora']= gpsPoints['time'].str.slice(11,13,1).astype(float)
-    gpsPoints['minuto']= gpsPoints['time'].str.slice(14,16,1).astype(float)
-    gpsPoints['segundo']= gpsPoints['time'].str.slice(17,19,1).astype(float)
+ 
+    #gpsPoints['time']=gpsPoints['time'].astype('string')
+    #gpsPoints['ano']= gpsPoints['time'].str.slice(0,4,1).astype(float)
+    #gpsPoints['mes']= gpsPoints['time'].str.slice(5,7,1).astype(float)
+    #gpsPoints['dia']= gpsPoints['time'].str.slice(8,10,1).astype(float)
+    #gpsPoints['hora']= gpsPoints['time'].str.slice(11,13,1).astype(float)
+    #gpsPoints['minuto']= gpsPoints['time'].str.slice(14,16,1).astype(float)
+    #gpsPoints['segundo']= gpsPoints['time'].str.slice(17,19,1).astype(float)
+    ## Actualizar cálculo del timestamp en segundos
+    gpsPoints['time']=pd.to_datetime(gpsPoints['time'], infer_datetime_format=True)    
     
+    #gpsPoints['tiempos_segundos'] = gpsPoints['time'].datetime.values.astype(np.int64) // 10 ** 9
+    #gpsPoints['tiempo_segundos'] = pd.Timestamp(gpsPoints['time'], unit = 's')
+    gpsPoints['tiempo_segundos'] = gpsPoints[['time']].apply(lambda x: x[0].timestamp(), axis=1).astype(int)
+    #print(gpsPoints['tiempo_segundos'])
     ## Calcular en segundos, código puede fallar si se toman datos entre cambio de mes a medianoche
 
-    gpsPoints['tiempo_segundos'] = gpsPoints['dia']*(24*3600)+gpsPoints['hora']*3600+gpsPoints['minuto']*60+gpsPoints['segundo']
+    #gpsPoints['tiempo_segundos'] = gpsPoints['dia']*(24*3600)+gpsPoints['hora']*3600+gpsPoints['minuto']*60+gpsPoints['segundo']
+    #print(gpsPoints['tiempo_segundos'])
 
     ## Crear base para compilar los recorridos
 
@@ -143,7 +151,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         trip['Sentido'] = Sentido
     
         tripTagged = gpd.sjoin(trip, segmentos, how = 'left', op ='intersects' )
-      
+                
+        
         # Cálculo de tiempo en cada timestep (el tiempo del timestep i es calculado con el registro anterior)
         tripTagged['Xi'] = tripTagged.geometry.x
         tripTagged['Yi'] = tripTagged.geometry.y
@@ -160,7 +169,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         #fileName = 'Viaje_'+str(viaje)+'.csv'
         #tripTagged.to_csv(fileName)
     
-        tripShort = tripTagged[['track_fid','track_seg_point_id','time','ano','mes','dia','hora','minuto','segundo','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s']]
+        tripShort = tripTagged[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s']]
     
         CompilaRecorridos = CompilaRecorridos.append(tripShort)
         #print(trip)
