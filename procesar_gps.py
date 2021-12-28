@@ -120,15 +120,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
                                   'hora': pd.Series([], dtype = 'int'),
                                   'minuto': pd.Series([], dtype = 'int'),
                                   'segundo': pd.Series([], dtype = 'int'),
-#                                  'tiempo_seg': pd.Series([], dtype = 'int'),
-#                                  'tiempo_seg_previo' : pd.Series([], dtype ='int'),
                                   'Sentido': pd.Series([], dtype = 'str'),
                                   'Segmento': pd.Series([], dtype = 'str'),
-#                                  'Desde': pd.Series([], dtype = 'str'),
-#                                  'Hasta': pd.Series([], dtype = 'str'),
-#                                  'Distancia_metros': pd.Series([], dtype = 'float'),
-#                                  'Velocidad_Km_h': pd.Series([], dtype = 'float'),
-#                                  'Track_no':pd.Series([], dtype = 'int'),
                                   'Modo':pd.Series([], dtype = 'str'),
     })
 
@@ -141,11 +134,6 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         Sentido = row[1][2]
         reg_inicio =row[1][4]
         reg_fin = row[1][5]
-        #print(row)
-        #print(Track)
-        #print(Sentido)
-        #print(reg_inicio)
-        #print(reg_fin)
     
         trip = gpsPoints[(gpsPoints['track_seg_point_id']>=reg_inicio) & (gpsPoints['track_seg_point_id']<=reg_fin) &(gpsPoints['track_fid']== Track)]
         trip['Sentido'] = Sentido
@@ -162,12 +150,10 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         tripTagged['Time_s_prev'] = tripTagged.tiempo_segundos.shift()
         tripTagged['Dist_m'] = np.sqrt(pow((tripTagged['Xi']-tripTagged['Xi_1']),2)+pow((tripTagged['Yi']-tripTagged['Yi_1']),2))
         tripTagged['Vel_Km_h'] = (tripTagged['Dist_m']/tripTagged['Time_s'])*3.6
-        ## Filter based on a min speed valule
         tripTagged['No_Recorrido'] = viaje
         tripTagged['Modo'] = modo
         tripTagged = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
-        #fileName = 'Viaje_'+str(viaje)+'.csv'
-        #tripTagged.to_csv(fileName)
+
     
         tripShort = tripTagged[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s']]
     
@@ -203,7 +189,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     
     result.to_csv(archivo2)
 
-    ## Corrección de los tiempos de distancias
+    ## Corrección de los tiempos de distancias (se mueve abajo)
 
     ## Pivot table para simular formato de entrega
 
@@ -213,5 +199,9 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     
     #tabla
     print("Finalizado correctamente")
+    
+    ## Outiler filter
+    
+    print("Entrando al filtro de datos atípicos")
 
 procesarGPS("T9_Noviembre","G9_Sergio_Oct9_AT_AC100_entre_KR48_y_KR7_LCL_BCL.gpx", "G9_No1_proyectado.shp", "Livianos Calzada lenta",1)
