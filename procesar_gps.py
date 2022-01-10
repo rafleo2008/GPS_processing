@@ -83,29 +83,12 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     segmentos
     
     minSpeed = velMin
-    #minSpeed = 3
-    #modo = "Auto"
 
-    ## Procesar timestamp, convertir a un valor en segundos basados en el mes
- 
-    #gpsPoints['time']=gpsPoints['time'].astype('string')
-    #gpsPoints['ano']= gpsPoints['time'].str.slice(0,4,1).astype(float)
-    #gpsPoints['mes']= gpsPoints['time'].str.slice(5,7,1).astype(float)
-    #gpsPoints['dia']= gpsPoints['time'].str.slice(8,10,1).astype(float)
-    #gpsPoints['hora']= gpsPoints['time'].str.slice(11,13,1).astype(float)
-    #gpsPoints['minuto']= gpsPoints['time'].str.slice(14,16,1).astype(float)
-    #gpsPoints['segundo']= gpsPoints['time'].str.slice(17,19,1).astype(float)
     ## Actualizar cálculo del timestamp en segundos
     gpsPoints['time']=pd.to_datetime(gpsPoints['time'], infer_datetime_format=True)    
     
-    #gpsPoints['tiempos_segundos'] = gpsPoints['time'].datetime.values.astype(np.int64) // 10 ** 9
-    #gpsPoints['tiempo_segundos'] = pd.Timestamp(gpsPoints['time'], unit = 's')
-    gpsPoints['tiempo_segundos'] = gpsPoints[['time']].apply(lambda x: x[0].timestamp(), axis=1).astype(int)
-    #print(gpsPoints['tiempo_segundos'])
-    ## Calcular en segundos, código puede fallar si se toman datos entre cambio de mes a medianoche
 
-    #gpsPoints['tiempo_segundos'] = gpsPoints['dia']*(24*3600)+gpsPoints['hora']*3600+gpsPoints['minuto']*60+gpsPoints['segundo']
-    #print(gpsPoints['tiempo_segundos'])
+    gpsPoints['tiempo_segundos'] = gpsPoints[['time']].apply(lambda x: x[0].timestamp(), axis=1).astype(int)
 
     ## Crear base para compilar los recorridos
 
@@ -120,15 +103,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
                                   'hora': pd.Series([], dtype = 'int'),
                                   'minuto': pd.Series([], dtype = 'int'),
                                   'segundo': pd.Series([], dtype = 'int'),
-#                                  'tiempo_seg': pd.Series([], dtype = 'int'),
-#                                  'tiempo_seg_previo' : pd.Series([], dtype ='int'),
                                   'Sentido': pd.Series([], dtype = 'str'),
                                   'Segmento': pd.Series([], dtype = 'str'),
-#                                  'Desde': pd.Series([], dtype = 'str'),
-#                                  'Hasta': pd.Series([], dtype = 'str'),
-#                                  'Distancia_metros': pd.Series([], dtype = 'float'),
-#                                  'Velocidad_Km_h': pd.Series([], dtype = 'float'),
-#                                  'Track_no':pd.Series([], dtype = 'int'),
                                   'Modo':pd.Series([], dtype = 'str'),
     })
 
@@ -141,11 +117,6 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         Sentido = row[1][2]
         reg_inicio =row[1][4]
         reg_fin = row[1][5]
-        #print(row)
-        #print(Track)
-        #print(Sentido)
-        #print(reg_inicio)
-        #print(reg_fin)
     
         trip = gpsPoints[(gpsPoints['track_seg_point_id']>=reg_inicio) & (gpsPoints['track_seg_point_id']<=reg_fin) &(gpsPoints['track_fid']== Track)]
         trip['Sentido'] = Sentido
@@ -166,17 +137,11 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         tripTagged['No_Recorrido'] = viaje
         tripTagged['Modo'] = modo
         tripTagged = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
-        #fileName = 'Viaje_'+str(viaje)+'.csv'
-        #tripTagged.to_csv(fileName)
     
         tripShort = tripTagged[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s']]
     
         CompilaRecorridos = CompilaRecorridos.append(tripShort)
-        #print(trip)
         viaje = viaje+1
-        #print(row['track_seg_point_id'])
-
-    #print(CompilaRecorridos)
     
     archivo1 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.csv"
     print("El archivo 1 se guarda como ")
