@@ -12,13 +12,13 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     geoZonesFilenameP = proyecto +"/"+geoZonesFilename
 
     ## Abrir GPS y zonas
-    gpsPoints = gpd.read_file(gpsFilenameP, layer = 'track_points')
-    geoZones = gpd.read_file(geoZonesFilenameP)
-    print(geoZones)
+    gpsPointsR = gpd.read_file(gpsFilenameP, layer = 'track_points')
+    geoZonesR = gpd.read_file(geoZonesFilenameP)
     ## Proyectar puntos de GPS en planas (aptas para Colombia en general)
     
     crs = "EPSG:3116"
-    gpsPoints = gpsPoints.to_crs(crs)
+    gpsPoints = gpsPointsR.to_crs(crs)
+    geoZones = geoZonesR.to_crs(crs)
     
     ## Seleccionar columnas relevantes
 
@@ -29,16 +29,21 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Filtrar polígonos de borde 
     
     borders = geoZones[geoZones['Tipo']== 'Borde']
-    
+    #borders.to_csv('bordes.csv')
     ## 2. Spatial Join de bordes con puntos GPS
 
     gpsPoints = gpd.sjoin(gpsPoints, borders, how = "left", op='intersects')
+    #gpsPoints.to_csv('test.csv')
     gpsPoints = gpsPoints.drop(columns=['index_right'])
     
+    
     ## 3. Listado de tracks del GPS
+    #print("GPSPoints")
+    #print(gpsPoints)
 
     tracks = gpsPoints.track_fid.unique()
-    
+    #print("Tracks")
+    #print(tracks)
     ## 4. Base de datos colectora de bordes
     
     collectorDB = pd.DataFrame({'track_fid': pd.Series([],dtype = 'int'),
@@ -58,8 +63,6 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         ### Eliminar puntos intermedios, (fuera de los polígonos de los bordes)
         
         trackBorderPoints = track_segment[track_segment[['Nombre']].notnull().all(1)]
-        print("Check trackBorderPoints")
-        print(trackBorderPoints)
     
         ### Cuando el nombre no sea igual entre celdas, se marca como cambio de dirección
     
@@ -80,7 +83,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Filtrar zonas que representan los segmentos
     
     segmentos = geoZones[geoZones ['Tipo']=='Segmento']
-    segmentos
+    print(segmentos)
     
     minSpeed = velMin
 
@@ -122,8 +125,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         trip['Sentido'] = Sentido
     
         tripTagged = gpd.sjoin(trip, segmentos, how = 'left', op ='intersects' )
-                
-        
+        print("Print tagged")        
+        print(tripTagged)
         # Cálculo de tiempo en cada timestep (el tiempo del timestep i es calculado con el registro anterior)
         tripTagged['Xi'] = tripTagged.geometry.x
         tripTagged['Yi'] = tripTagged.geometry.y
@@ -158,6 +161,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
                                                                                    'tiempo_segundos': ['min','max'],
                                                                                    'Vel_x_tiem':['sum'],
                                                                                    'Time_s':['sum']})
+    print("Resultado group By")
+    print(result)
     result = result.reset_index()
     result.columns=['Recorrido','Sentido','Desde','Hasta','Distancia','Tiempo_prev_min','Tiempo_min','Tiempo_max','VelT','Ttot']
     result['VelPonderada'] = result['VelT']/result['Ttot']
@@ -179,4 +184,4 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     #tabla
     print("Finalizado correctamente")
 
-procesarGPS("T9_Noviembre","G9_Sergio_Oct9_AT_AC100_entre_KR48_y_KR7_LCL_BCL.gpx", "G9_No1_proyectado.shp", "Livianos Calzada lenta",1)
+procesarGPS("Peatonales","Ped_cedritos.gpx", "Cercas_ped.shp", "Peatonales",0)
