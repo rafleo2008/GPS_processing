@@ -153,6 +153,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     
     # Parte 2, cálculo de velocidades, tiempos y organizar resultados
     
+    ## Revisar este bloque, quitar tiempo max - minimo, computar con dtiempo 
     base = CompilaRecorridos
     
     base['Vel_x_tiem'] = base['Vel_Km_h']*base['Time_s']
@@ -168,9 +169,9 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     result['VelPonderada'] = result['VelT']/result['Ttot']
     result['Tiempo_en_tramo'] = (result['Tiempo_max']-result['Tiempo_min'])/3600
     result['Velocidad'] = (result['Distancia']/1000)/result['Tiempo_en_tramo']
-    #result
-    archivo2 = proyecto +"/"+ "02_Resultado_"+gpsFilename+"_velocidad_calculada.csv"
     
+    #Print results second stage
+    archivo2 = proyecto +"/"+ "02_Resultado_"+gpsFilename+"_velocidad_calculada.csv"
     result.to_csv(archivo2)
 
     ## Corrección de los tiempos de distancias
@@ -184,4 +185,4 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     #tabla
     print("Finalizado correctamente")
 
-procesarGPS("Peatonales","Ped_cedritos.gpx", "Cercas_ped.shp", "Peatonales",0)
+procesarGPS("T9_Noviembre","G9_Sergio_Oct9_AT_AC100_entre_KR48_y_KR7_LCL_BCL.gpx", "G9_No1_proyectado.shp", "Autos",3)
