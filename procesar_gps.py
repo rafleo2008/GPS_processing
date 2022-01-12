@@ -83,7 +83,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Filtrar zonas que representan los segmentos
     
     segmentos = geoZones[geoZones ['Tipo']=='Segmento']
-    print(segmentos)
+#    print(segmentos)
     
     minSpeed = velMin
 
@@ -125,8 +125,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         trip['Sentido'] = Sentido
     
         tripTagged = gpd.sjoin(trip, segmentos, how = 'left', op ='intersects' )
-        print("Print tagged")        
-        print(tripTagged)
+#        print("Print tagged")        
+#        print(tripTagged)
         # Cálculo de tiempo en cada timestep (el tiempo del timestep i es calculado con el registro anterior)
         tripTagged['Xi'] = tripTagged.geometry.x
         tripTagged['Yi'] = tripTagged.geometry.y
@@ -162,8 +162,16 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
                                                                                    'tiempo_segundos': ['min','max'],
                                                                                    'Vel_x_tiem':['sum'],
                                                                                    'Time_s':['sum']})
-#    print("Resultado group By")
-#    print(result)
+    print("Resultado group By")
+    print(result)
+    
+    ## Temporal de revisión de indicadores
+    
+    archivo1_5 = proyecto +"/"+ gpsFilename + "groupBy.csv"
+    result.to_csv(archivo1_5)
+    
+    ## Fin temporal
+    
     result = result.reset_index()
     result.columns=['Recorrido','Sentido','Desde','Hasta','Distancia','Tiempo_prev_min','Tiempo_min','Tiempo_max','VelT','Ttot']
     result['VelPonderada'] = result['VelT']/result['Ttot']
