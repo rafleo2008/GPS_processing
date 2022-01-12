@@ -162,8 +162,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
                                                                                    'tiempo_segundos': ['min','max'],
                                                                                    'Vel_x_tiem':['sum'],
                                                                                    'Time_s':['sum']})
-    print("Resultado group By")
-    print(result)
+#    print("Resultado group By")
+#    print(result)
     result = result.reset_index()
     result.columns=['Recorrido','Sentido','Desde','Hasta','Distancia','Tiempo_prev_min','Tiempo_min','Tiempo_max','VelT','Ttot']
     result['VelPonderada'] = result['VelT']/result['Ttot']
