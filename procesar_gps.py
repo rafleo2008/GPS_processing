@@ -15,7 +15,6 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     gpsPointsR = gpd.read_file(gpsFilenameP, layer = 'track_points')
     geoZonesR = gpd.read_file(geoZonesFilenameP)
     ## Proyectar puntos de GPS en planas (aptas para Colombia en general)
-    
     crs = "EPSG:3116"
     gpsPoints = gpsPointsR.to_crs(crs)
     geoZones = geoZonesR.to_crs(crs)
@@ -27,9 +26,16 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     #### Etapa A: Identificar bordes y direccion de los recorridos
     
     ## Filtrar polígonos de borde 
-    
+
     borders = geoZones[geoZones['Tipo']== 'Borde']
-    #borders.to_csv('bordes.csv')
+    #print("Columnas borders")
+    #print(borders.columns)
+    
+    ## Check shapefile has border polygons
+    no_borde = borders['geometry'].count()
+    if(no_borde<2):
+        print("Error, hoy hay suficientes zonas tageadas como tipo Borde")
+        
     ## 2. Spatial Join de bordes con puntos GPS
 
     gpsPoints = gpd.sjoin(gpsPoints, borders, how = "left", op='intersects')
@@ -74,17 +80,17 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         trackBorderPoints = trackBorderPoints[trackBorderPoints['Nombre_destino'].notnull()]
         
         ## Juntar el procesamiento de cambio de sentido de todos los tracks
-        
+
         collectorDB = collectorDB.append(trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']])
         #print(trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']])
-    
+
     ### Etapa B: Filtrar basado en los puntos de cambio de sentido
     
     ## Filtrar zonas que representan los segmentos
-    
     segmentos = geoZones[geoZones ['Tipo']=='Segmento']
+
 #    print(segmentos)
-    
+
     minSpeed = velMin
 
     ## Actualizar cálculo del timestamp en segundos
@@ -114,8 +120,9 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
 
     ## Procesar para cada track los recorridos
     viaje = 1
+
     for row in collectorDB.iterrows():
-    
+        
         Track = row[1][0]
         Sentido = row[1][2]
         reg_inicio =row[1][4]
@@ -125,8 +132,9 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         trip['Sentido'] = Sentido
     
         tripTagged = gpd.sjoin(trip, segmentos, how = 'left', op ='intersects' )
-#        print("Print tagged")        
-#        print(tripTagged)
+        #print("Print tagged")        
+        #print(tripTagged)
+        #print(tripTagged.columns)
         # Cálculo de tiempo en cada timestep (el tiempo del timestep i es calculado con el registro anterior)
         tripTagged['Xi'] = tripTagged.geometry.x
         tripTagged['Yi'] = tripTagged.geometry.y
@@ -135,28 +143,55 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         tripTagged['Time_s'] = tripTagged['tiempo_segundos']-tripTagged.tiempo_segundos.shift()
         tripTagged['Time_s_prev'] = tripTagged.tiempo_segundos.shift()
         tripTagged['Dist_m'] = np.sqrt(pow((tripTagged['Xi']-tripTagged['Xi_1']),2)+pow((tripTagged['Yi']-tripTagged['Yi_1']),2))
+        tripTagged['Distance_meters_original'] = tripTagged['Distance_m_right']
+        
         tripTagged['Vel_Km_h'] = (tripTagged['Dist_m']/tripTagged['Time_s'])*3.6
         ## Filter based on a min speed valule
         tripTagged['No_Recorrido'] = viaje
         tripTagged['Modo'] = modo
         tripTagged = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
     
-        tripShort = tripTagged[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s']]
+        tripShort = tripTagged[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s','Distance_meters_original','geometry','Xi','Yi']]
     
         CompilaRecorridos = CompilaRecorridos.append(tripShort)
         viaje = viaje+1
     
     archivo1 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.csv"
+    archivo1gjson = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.geojson"
     print("El archivo 1 se guarda como ")
     print(archivo1)
     CompilaRecorridos.to_csv(archivo1)
+    GeoTrack = gpd.GeoDataFrame(CompilaRecorridos, geometry=gpd.points_from_xy(CompilaRecorridos.Xi,CompilaRecorridos.Yi)).set_crs(crs)
+    
+    GeoTrack.to_file(archivo1gjson, driver='GeoJSON')
+    
+    ## Sort and cumsum
+    CompilaRecorridos = CompilaRecorridos.sort_values(['No_Recorrido','Nombre_right','Vel_Km_h'], ascending = (True, True, False))
+    CompilaRecorridos['CumDistance']=CompilaRecorridos.groupby(['No_Recorrido','Nombre_right'])['Dist_m'].transform(pd.Series.cumsum)
+    CompilaRecorridos.to_csv(archivo1)
+    CompilaRecorridos = CompilaRecorridos[CompilaRecorridos['CumDistance'] <= CompilaRecorridos['Distance_meters_original']]
+
+    archivo2 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_depurada_por_distancia.csv"
+    CompilaRecorridos.to_csv(archivo2)
+
+    
     
     # Parte 2, cálculo de velocidades, tiempos y organizar resultados
     
-    ## Revisar este bloque, quitar tiempo max - minimo, computar con dtiempo 
+    ## Revisar este bloque, quitar tiempo max - minimo, computar con dtiempo
+    
     base = CompilaRecorridos
     
     base['Vel_x_tiem'] = base['Vel_Km_h']*base['Time_s']
+    statistics = base.groupby(['No_Recorrido','Sentido','Desde_right','Hasta_right']).agg({'No_Recorrido':['count'],
+                                                                                           'Vel_Km_h':['min','max','std'],
+                                                                                           'Vel_x_tiem':['sum'],
+                                                                                           'Time_s':['sum'],
+                                                                                           'Distance_meters_original':['max'],
+                                                                                           'Dist_m':['sum']})
+    
+    archivo_2 = proyecto+"/"+"02_"+gpsFilename+"_estadisticos.csv"
+    statistics.to_csv(archivo_2)
     result = base.groupby(['No_Recorrido','Sentido','Desde_right','Hasta_right']).agg({'Dist_m':['sum'],
                                                                                    'Time_s_prev':['min'],
                                                                                    'tiempo_segundos': ['min','max'],
@@ -193,4 +228,4 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     #tabla
     print("Finalizado correctamente")
 
-procesarGPS("T9_Noviembre","G9_Sergio_Oct9_AT_AC100_entre_KR48_y_KR7_LCL_BCL.gpx", "G9_No1_proyectado.shp", "Autos",3)
+procesarGPS("G3_Test","AT_G4_GPS12_08012022_LCR.gpx", "G4_CRS.shp", "Livianos calzada rapida",0)
