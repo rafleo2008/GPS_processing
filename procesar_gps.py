@@ -1,3 +1,27 @@
+### Libraries
+import pandas as pd
+import geopandas as gpd
+### Parameters
+
+def open_file (project, gpsFile, shpFile):
+    ''' Takes project name and file names and open the respective files from the project folder
+    Args:
+        project (str): name of the project folder
+        gpsFile (str): name of the gps file (including.gpx)
+        shpFile (str): name of the shp zones file (including .shp)
+    Returns:
+        gpsPoints: geodataframe containing gps points data
+        shpPolygons: geodataframe containing shapefile polygons data
+        
+    '''
+    gpsName = project+"/"+gpsFile
+    shpName = project+"/"+shpFile
+    
+    gpsPoints = gpd.read_file(gpsName, layer = 'track_points')
+    shpPolygons = gpd.read_file(shpName)
+    
+    return gpsPoints, shpPolygons
+
 def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Paquetes
     import pandas as pd
@@ -8,12 +32,14 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     from datetime import datetime
     ## Preparación de archivos
     
-    gpsFilenameP = proyecto +"/"+gpsFilename
-    geoZonesFilenameP = proyecto +"/"+geoZonesFilename
+    gpsPointsR, geoZonesR = open_file(proyecto, gpsFilename, geoZonesFilename)
+    
+    #gpsFilenameP = proyecto +"/"+gpsFilename
+    #geoZonesFilenameP = proyecto +"/"+geoZonesFilename
 
     ## Abrir GPS y zonas
-    gpsPointsR = gpd.read_file(gpsFilenameP, layer = 'track_points')
-    geoZonesR = gpd.read_file(geoZonesFilenameP)
+    #gpsPointsR = gpd.read_file(gpsFilenameP, layer = 'track_points')
+    #geoZonesR = gpd.read_file(geoZonesFilenameP)
     ## Proyectar puntos de GPS en planas (aptas para Colombia en general)
     crs = "EPSG:3116"
     gpsPoints = gpsPointsR.to_crs(crs)
