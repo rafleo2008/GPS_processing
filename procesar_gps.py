@@ -36,6 +36,24 @@ def project_epsg_batch(filelist, crs):
         filelist[i]=filelist[i].to_crs(crs)
     return(filelist)
 
+def filter_zones(polygons, zone_type, check_entities):
+    ''' Filter zones based on zone-_type, and then check if they have at least 2 zones
+    Args:
+        polygons(gdf): geodataframe containing desired polygons to be filtered
+        zone_type(str):Word to be used in the filter of Tipo column
+        check_entities(bool): Check if there are more than 2 entities, this is necessary because in border, we need at least 2 zones
+    Returns: Filtered GeodataFrame
+    '''
+    filteredGPD = polygons[polygons['Tipo']== zone_type]
+    
+    ## Check minimum errors
+    if check_entities == True:
+        print('Checking minimun units for {}'.format(zone_type))
+        no_entities = filteredGPD['geometry'].count()
+        if (no_entities < 2):
+            print('Warning, theres not enough zones tagged as Borde, only {}'.format(no_entities))
+    return(filteredGPD)
+
 def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Paquetes
     import pandas as pd
@@ -48,7 +66,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Open files 
     
     gpsPointsR, geoZonesR = open_file(proyecto, gpsFilename, geoZonesFilename)
-    
+
     ## Project files
     crs = "EPSG:3116"
     
@@ -57,37 +75,25 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     gpsPoints = gpdVector[0]
     geoZones =  gpdVector[1]
     
-    ## Seleccionar columnas relevantes
-
+    ## Select relevant columns
+        
     gpsPoints = gpsPoints[['track_fid','track_seg_point_id','ele','time','geometry']]
     
-    #### Etapa A: Identificar bordes y direccion de los recorridos
+    #### Etapa A: Borders and track direction
     
-    ## Filtrar polígonos de borde 
-
-    borders = geoZones[geoZones['Tipo']== 'Borde']
-    #print("Columnas borders")
-    #print(borders.columns)
+    ## Filter border zones
     
-    ## Check shapefile has border polygons
-    no_borde = borders['geometry'].count()
-    if(no_borde<2):
-        print("Error, hoy hay suficientes zonas tageadas como tipo Borde")
-        
-    ## 2. Spatial Join de bordes con puntos GPS
+    borders = filter_zones(geoZones, 'Borde', True)
+ 
+    ## 2. Spatial Join between borders and gps points
 
     gpsPoints = gpd.sjoin(gpsPoints, borders, how = "left", op='intersects')
-    #gpsPoints.to_csv('test.csv')
     gpsPoints = gpsPoints.drop(columns=['index_right'])
     
-    
     ## 3. Listado de tracks del GPS
-    #print("GPSPoints")
-    #print(gpsPoints)
 
     tracks = gpsPoints.track_fid.unique()
-    #print("Tracks")
-    #print(tracks)
+
     ## 4. Base de datos colectora de bordes
     
     collectorDB = pd.DataFrame({'track_fid': pd.Series([],dtype = 'int'),
