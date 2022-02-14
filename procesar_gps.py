@@ -22,6 +22,20 @@ def open_file (project, gpsFile, shpFile):
     
     return gpsPoints, shpPolygons
 
+def project_epsg_batch(filelist, crs):
+    ''' Takes geodataframes contained in a vector and project o a specified crs
+    Args:
+        filelist (vector): vector containing n geodataframes
+        crs (str): name of the crs to be projected (ex: EPSG:3116)
+    Returns:
+        filelist: vector containing n transformed geodataframes
+        
+    '''
+    elements = len(filelist)
+    for i in range(elements):
+        filelist[i]=filelist[i].to_crs(crs)
+    return(filelist)
+
 def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Paquetes
     import pandas as pd
@@ -30,20 +44,18 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     import matplotlib.pyplot as plt
     import numpy as np
     from datetime import datetime
-    ## Preparación de archivos
+    
+    ## Open files 
     
     gpsPointsR, geoZonesR = open_file(proyecto, gpsFilename, geoZonesFilename)
     
-    #gpsFilenameP = proyecto +"/"+gpsFilename
-    #geoZonesFilenameP = proyecto +"/"+geoZonesFilename
-
-    ## Abrir GPS y zonas
-    #gpsPointsR = gpd.read_file(gpsFilenameP, layer = 'track_points')
-    #geoZonesR = gpd.read_file(geoZonesFilenameP)
-    ## Proyectar puntos de GPS en planas (aptas para Colombia en general)
+    ## Project files
     crs = "EPSG:3116"
-    gpsPoints = gpsPointsR.to_crs(crs)
-    geoZones = geoZonesR.to_crs(crs)
+    
+    gpdVector = project_epsg_batch([gpsPointsR, geoZonesR], crs)
+    
+    gpsPoints = gpdVector[0]
+    geoZones =  gpdVector[1]
     
     ## Seleccionar columnas relevantes
 
