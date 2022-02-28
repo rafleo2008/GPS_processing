@@ -1,5 +1,6 @@
 ### Libraries
 import pandas as pd
+pd.options.mode.chained_assignment = None  # default='warn'
 import geopandas as gpd
 ### Parameters
 
@@ -52,8 +53,24 @@ def filter_zones(polygons, zone_type, check_entities):
         no_entities = filteredGPD['geometry'].count()
         if (no_entities < 2):
             print('Warning, theres not enough zones tagged as Borde, only {}'.format(no_entities))
+        else:
+            print('Notice, there are {} polygons'.format(no_entities))
     return(filteredGPD)
 
+def direction_identificator(geoTrackPoints, noTrack):
+    
+    # Filter points of specific track
+    track_segment = geoTrackPoints[geoTrackPoints['track_fid'] == noTrack]
+    # Eliminate intermediate points    
+    trackBorderPoints = track_segment[track_segment[['Nombre']].notnull().all(1)]
+    # When name changes, is a direction change
+    trackBorderPoints.loc[:, 'track_seg_point_id_destino'] = trackBorderPoints['track_seg_point_id'].shift(-1)
+    trackBorderPoints.loc[:, 'Nombre_destino'] = trackBorderPoints['Nombre'].shift(-1)  
+    changingPoint = trackBorderPoints[trackBorderPoints['Nombre'] != trackBorderPoints['Nombre_destino']]
+    changingPoint.loc[:, 'Sentido'] = ('De '+ changingPoint['Nombre'] + ' a ' +  changingPoint['Nombre_destino'])
+    changePoints = changingPoint[changingPoint['Nombre_destino'].notnull()]    
+    return changePoints
+    
 def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Paquetes
     import pandas as pd
@@ -64,35 +81,35 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     from datetime import datetime
     
     ## Open files 
-    
+    print('Open File')
     gpsPointsR, geoZonesR = open_file(proyecto, gpsFilename, geoZonesFilename)
 
     ## Project files
     crs = "EPSG:3116"
-    
+    print('Project coordinates')
     gpdVector = project_epsg_batch([gpsPointsR, geoZonesR], crs)
     
-    gpsPoints = gpdVector[0]
+    gpsPointsA = gpdVector[0]
     geoZones =  gpdVector[1]
     
     ## Select relevant columns
         
-    gpsPoints = gpsPoints[['track_fid','track_seg_point_id','ele','time','geometry']]
+    gpsPoints = gpsPointsA[['track_fid','track_seg_point_id','ele','time','geometry']]
     
     #### Etapa A: Borders and track direction
     
     ## Filter border zones
-    
+    print('Filter border zones')
     borders = filter_zones(geoZones, 'Borde', True)
  
     ## 2. Spatial Join between borders and gps points
-
+    print("Loop in tracks")
     gpsPoints = gpd.sjoin(gpsPoints, borders, how = "left", op='intersects')
-    gpsPoints = gpsPoints.drop(columns=['index_right'])
+    gpsPointsNoIndex = gpsPoints.drop(columns=['index_right'])
     
-    ## 3. Listado de tracks del GPS
+    ## 3. List of GPS tracks
 
-    tracks = gpsPoints.track_fid.unique()
+    tracks = gpsPointsNoIndex.track_fid.unique()
 
     ## 4. Base de datos colectora de bordes
     
@@ -101,47 +118,31 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
                            'Sentido': pd.Series([],dtype = 'str'),
                            'rec_destino': pd.Series([],dtype = 'int')})
     
-    ## 5. Iterar cada track
+    ## 5. Iterar cada track 
+    countTrack = 0
     
     for track in tracks:
-
+                
         ## Filtrar puntos del track seleccionado
+        trackBorderPoints = direction_identificator(gpsPointsNoIndex, track)
+        #pd.concat([collectorDB, trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']]])
         
-        track_segment = gpsPoints[gpsPoints['track_fid']== track]
-        tracktext = 'base'+track.astype(str)
-    
-        ### Eliminar puntos intermedios, (fuera de los polígonos de los bordes)
-        
-        trackBorderPoints = track_segment[track_segment[['Nombre']].notnull().all(1)]
-    
-        ### Cuando el nombre no sea igual entre celdas, se marca como cambio de dirección
-    
-        trackBorderPoints['track_seg_point_id_destino'] = trackBorderPoints.track_seg_point_id.shift(-1)
-        trackBorderPoints['Nombre_destino'] = trackBorderPoints.Nombre.shift(-1)
-        
-        trackBorderPoints = trackBorderPoints[trackBorderPoints['Nombre'] != trackBorderPoints['Nombre_destino']]
-        trackBorderPoints['Sentido'] = 'De '+ trackBorderPoints['Nombre'] + ' a ' +  trackBorderPoints['Nombre_destino']
-        trackBorderPoints = trackBorderPoints[trackBorderPoints['Nombre_destino'].notnull()]
-        
-        ## Juntar el procesamiento de cambio de sentido de todos los tracks
-
-        collectorDB = collectorDB.append(trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']])
-        #print(trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']])
-
+        collectorDB = pd.concat([collectorDB, trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']]])
+        countTrack =countTrack + 1
+   
+        print('Test')
+    print('{} tracks found in gpx file'.format(countTrack) )    
     ### Etapa B: Filtrar basado en los puntos de cambio de sentido
     
     ## Filtrar zonas que representan los segmentos
     segmentos = geoZones[geoZones ['Tipo']=='Segmento']
 
-#    print(segmentos)
-
     minSpeed = velMin
 
     ## Actualizar cálculo del timestamp en segundos
-    gpsPoints['time']=pd.to_datetime(gpsPoints['time'], infer_datetime_format=True)    
-    
+    gpsPointsNoIndex['time']=pd.to_datetime(gpsPointsNoIndex['time'], infer_datetime_format=True)    
 
-    gpsPoints['tiempo_segundos'] = gpsPoints[['time']].apply(lambda x: x[0].timestamp(), axis=1).astype(int)
+    gpsPointsNoIndex['tiempo_segundos'] = gpsPointsNoIndex[['time']].apply(lambda x: x[0].timestamp(), axis=1).astype(int)
 
     ## Crear base para compilar los recorridos
 
@@ -162,8 +163,9 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     })
 
 
-    ## Procesar para cada track los recorridos
+    ## Procesar para cada recorrido los recorridos
     viaje = 1
+    print("Loop per each trip")
 
     for row in collectorDB.iterrows():
         
@@ -172,19 +174,17 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         reg_inicio =row[1][4]
         reg_fin = row[1][5]
     
-        trip = gpsPoints[(gpsPoints['track_seg_point_id']>=reg_inicio) & (gpsPoints['track_seg_point_id']<=reg_fin) &(gpsPoints['track_fid']== Track)]
+        trip = gpsPointsNoIndex[(gpsPointsNoIndex['track_seg_point_id']>=reg_inicio) & (gpsPointsNoIndex['track_seg_point_id']<=reg_fin) &(gpsPointsNoIndex['track_fid']== Track)]
         trip['Sentido'] = Sentido
-    
+   
         tripTagged = gpd.sjoin(trip, segmentos, how = 'left', op ='intersects' )
-        #print("Print tagged")        
-        #print(tripTagged)
-        #print(tripTagged.columns)
+
         # Cálculo de tiempo en cada timestep (el tiempo del timestep i es calculado con el registro anterior)
         tripTagged['Xi'] = tripTagged.geometry.x
         tripTagged['Yi'] = tripTagged.geometry.y
         tripTagged['Xi_1'] = tripTagged.Xi.shift()
         tripTagged['Yi_1'] = tripTagged.Yi.shift()
-        tripTagged['Time_s'] = tripTagged['tiempo_segundos']-tripTagged.tiempo_segundos.shift()
+        tripTagged['Time_s'] = tripTagged['tiempo_segundos']-tripTagged['tiempo_segundos'].shift()
         tripTagged['Time_s_prev'] = tripTagged.tiempo_segundos.shift()
         tripTagged['Dist_m'] = np.sqrt(pow((tripTagged['Xi']-tripTagged['Xi_1']),2)+pow((tripTagged['Yi']-tripTagged['Yi_1']),2))
         tripTagged['Distance_meters_original'] = tripTagged['Distance_m_right']
@@ -193,13 +193,16 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         ## Filter based on a min speed valule
         tripTagged['No_Recorrido'] = viaje
         tripTagged['Modo'] = modo
-        tripTagged = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
+        filteredSpeedTrip = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
+        #tripTagged = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
     
-        tripShort = tripTagged[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s','Distance_meters_original','geometry','Xi','Yi']]
-    
-        CompilaRecorridos = CompilaRecorridos.append(tripShort)
+        tripShort = filteredSpeedTrip[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s','Distance_meters_original','geometry','Xi','Yi']]
+        
+        #collectorDB = pd.concat([collectorDB, trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']]])
+        CompilaRecorridos = pd.concat([CompilaRecorridos, tripShort])
+        #CompilaRecorridos = CompilaRecorridos.append(tripShort)
         viaje = viaje+1
-    
+    print("{} trips has been processed".format(viaje))
     archivo1 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.csv"
     archivo1gjson = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.geojson"
     print("El archivo 1 se guarda como ")
