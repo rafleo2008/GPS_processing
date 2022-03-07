@@ -22,7 +22,7 @@ def open_file (project, gpsFile, shpFile):
     gpsPoints = gpd.read_file(gpsName, layer = 'track_points')
     shpPolygons = gpd.read_file(shpName)
     
-    return gpsPoints, shpPolygons
+    return gpsPoints, shpPolygons   
 
 def project_epsg_batch(filelist, crs):
     ''' Takes geodataframes contained in a vector and project o a specified crs
@@ -110,7 +110,12 @@ def calculateSpeed(geodataframe, segments, row, tripCount, mode, minSpeed):
     filteredSpeedTrip = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]        
     tripShort = filteredSpeedTrip[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s','Distance_meters_original','geometry','Xi','Yi']]
     return tripShort
-
+def cumsumFilter(speedTracks):
+    compilaRecorridos = speedTracks.sort_values(['No_Recorrido','Nombre_right','Vel_Km_h'], ascending = (True, True, False))  
+    compilaRecorridos['CumDistance']=compilaRecorridos.groupby(['No_Recorrido','Nombre_right'])['Dist_m'].transform(pd.Series.cumsum)
+    #CompilaRecorridos.to_csv(archivo1)
+    filteredTracks = compilaRecorridos[compilaRecorridos['CumDistance'] <= compilaRecorridos['Distance_meters_original']]
+    return compilaRecorridos, filteredTracks
 ### Main function
     
 def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
@@ -200,6 +205,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
         
     print("{} trips has been processed".format(viaje))
     
+    ### Save first result (In csv and geojson)    
+    
     archivo1 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.csv"
     archivo1gjson = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.geojson"
     CompilaRecorridos.to_csv(archivo1)
@@ -207,23 +214,26 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     GeoTrack.to_file(archivo1gjson, driver='GeoJSON')
     print("El archivo 1 se guarda como ")
     print(archivo1)    
-
-    ## Sort and cumsum
-    CompilaRecorridos = CompilaRecorridos.sort_values(['No_Recorrido','Nombre_right','Vel_Km_h'], ascending = (True, True, False))
-    CompilaRecorridos['CumDistance']=CompilaRecorridos.groupby(['No_Recorrido','Nombre_right'])['Dist_m'].transform(pd.Series.cumsum)
-    CompilaRecorridos.to_csv(archivo1)
-    CompilaRecorridos = CompilaRecorridos[CompilaRecorridos['CumDistance'] <= CompilaRecorridos['Distance_meters_original']]
-    archivo2 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_depurada_por_distancia.csv"
-    CompilaRecorridos.to_csv(archivo2)
-    print("El archivo 1 para seguimiento se guarda como ")
-    print(archivo2) 
     
-    # Parte 2, cálculo de velocidades, tiempos y organizar resultados
+    ### Sort speeds and calculate cumsum
+    
+    cumsumDatabase, filteredDatabase = cumsumFilter(CompilaRecorridos)
+    
+    archivo2 = proyecto +"/"+ "02_Resultado_"+gpsFilename+"_base_cruda_cumsum.csv"
+    cumsumDatabase.to_csv(archivo2)
+    archivo3 = proyecto +"/"+ "03_Resultado_"+gpsFilename+"_base_cruda_cumsum_filtered.csv"
+    filteredDatabase.to_csv(archivo3)
+    print("Results of cumsum")
+    print("Original file has {} rows".format(len(cumsumDatabase.index)))
+    print("Results of filtered cumsum")
+    print("Filtered file has {} rows".format(len(filteredDatabase.index)))
+    
+    
+    ## Speed calculations, times and output format
+        
     
     ## Revisar este bloque, quitar tiempo max - minimo, computar con dtiempo
-    
     base = CompilaRecorridos
-    
     base['Vel_x_tiem'] = base['Vel_Km_h']*base['Time_s']
     statistics = base.groupby(['No_Recorrido','Sentido','Desde_right','Hasta_right']).agg({'No_Recorrido':['count'],
                                                                                            'Vel_Km_h':['min','max','std'],
@@ -232,8 +242,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
                                                                                            'Distance_meters_original':['max'],
                                                                                            'Dist_m':['sum']})
     
-    archivo_2 = proyecto+"/"+"02_"+gpsFilename+"_estadisticos.csv"
-    statistics.to_csv(archivo_2)
+    archivo4 = proyecto+"/"+"04_Resultado_"+gpsFilename+"_estadisticos.csv"
+    statistics.to_csv(archivo4)
     result = base.groupby(['No_Recorrido','Sentido','Desde_right','Hasta_right']).agg({'Dist_m':['sum'],
                                                                                    'Time_s_prev':['min'],
                                                                                    'tiempo_segundos': ['min','max'],
@@ -243,9 +253,8 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     print(result)
     
     ## Temporal de revisión de indicadores
-    
-    archivo1_5 = proyecto +"/"+ gpsFilename + "groupBy.csv"
-    result.to_csv(archivo1_5)
+    archivo5 = proyecto +"/"+"05_Resultado_"+ gpsFilename + "groupBy.csv"
+    result.to_csv(archivo5)
     
     ## Fin temporal
     
@@ -256,18 +265,18 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     result['Velocidad'] = (result['Distancia']/1000)/result['Tiempo_en_tramo']
     
     #Print results second stage
-    archivo2 = proyecto +"/"+ "02_Resultado_"+gpsFilename+"_velocidad_calculada.csv"
-    result.to_csv(archivo2)
+    archivo5 = proyecto +"/"+ "05_Resultado_"+gpsFilename+"_velocidad_calculada.csv"
+    result.to_csv(archivo5)
 
     ## Corrección de los tiempos de distancias
 
     ## Pivot table para simular formato de entrega
 
     tabla = pd.pivot_table(result, values = 'Tiempo_en_tramo', index = ['Desde','Hasta'], columns = ['Sentido','Recorrido'])
-    archivo3 = proyecto +"/"+"03_Resultado"+gpsFilename+"formato_reporte.csv"
-    tabla.to_csv(archivo3)
+    archivo6 = proyecto +"/"+"06_Resultado"+gpsFilename+"formato_reporte.csv"
+    tabla.to_csv(archivo6)
     
     #tabla
     print("Finalizado correctamente")
 
-procesarGPS("G3_Test","AT_G4_GPS12_08012022_LCR.gpx", "G4_CRS.shp", "Livianos calzada rapida",0)
+procesarGPS("G3_Test","AT_G4_GPS12_08012022_LCR.gpx", "G4_CRS.shp", "Livianos calzada rapida",3)
