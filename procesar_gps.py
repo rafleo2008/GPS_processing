@@ -2,6 +2,7 @@
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
 import geopandas as gpd
+import numpy as np
 ### Parameters
 
 def open_file (project, gpsFile, shpFile):
@@ -58,7 +59,13 @@ def filter_zones(polygons, zone_type, check_entities):
     return(filteredGPD)
 
 def direction_identificator(geoTrackPoints, noTrack):
-    
+    '''Detect direction for a specific track based on a name change in the
+    border zones
+    Args:
+        geoTrackPoints(gdf)= geodataframe containing gpx point data
+        noTrack(int) = no of track
+    Returns Points where direction changes
+    '''
     # Filter points of specific track
     track_segment = geoTrackPoints[geoTrackPoints['track_fid'] == noTrack]
     # Eliminate intermediate points    
@@ -70,6 +77,41 @@ def direction_identificator(geoTrackPoints, noTrack):
     changingPoint.loc[:, 'Sentido'] = ('De '+ changingPoint['Nombre'] + ' a ' +  changingPoint['Nombre_destino'])
     changePoints = changingPoint[changingPoint['Nombre_destino'].notnull()]    
     return changePoints
+
+def calculateSpeed(geodataframe, segments, row, tripCount, mode, minSpeed):
+    ## Define facts from row
+    track = row[1][0]
+    direction = row[1][2]
+    staRow = row[1][4]
+    endRow = row[1][5]
+    
+    #Filter geodataframe trip and assign direction
+    trip = geodataframe[(geodataframe['track_seg_point_id']>=staRow) & (geodataframe['track_seg_point_id']<=endRow) &(geodataframe['track_fid']== track)]
+    trip['Sentido'] = direction
+    tripTagged = gpd.sjoin(trip, segments, how = 'left', op ='intersects' )
+    tripTagged['No_Recorrido'] = tripCount
+    
+    # Process position and distance
+    tripTagged['Xi'] = tripTagged.geometry.x
+    tripTagged['Yi'] = tripTagged.geometry.y
+    tripTagged['Xi_1'] = tripTagged.Xi.shift()
+    tripTagged['Yi_1'] = tripTagged.Yi.shift()
+    tripTagged['Dist_m'] = np.sqrt(pow((tripTagged['Xi']-tripTagged['Xi_1']),2)+pow((tripTagged['Yi']-tripTagged['Yi_1']),2))
+    tripTagged['Distance_meters_original'] = tripTagged['Distance_m_right']
+    # Time
+    tripTagged['Time_s'] = tripTagged['tiempo_segundos']-tripTagged['tiempo_segundos'].shift()
+    tripTagged['Time_s_prev'] = tripTagged.tiempo_segundos.shift()
+    tripTagged['Vel_Km_h'] = (tripTagged['Dist_m']/tripTagged['Time_s'])*3.6
+    
+    ## Filter based on a min speed valule
+    tripTagged['Modo'] = mode
+    #if speedBool == True:
+    #    print("Filtering min speed")
+    filteredSpeedTrip = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]        
+    tripShort = filteredSpeedTrip[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s','Distance_meters_original','geometry','Xi','Yi']]
+    return tripShort
+
+### Main function
     
 def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     ## Paquetes
@@ -85,6 +127,7 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     gpsPointsR, geoZonesR = open_file(proyecto, gpsFilename, geoZonesFilename)
 
     ## Project files
+    
     crs = "EPSG:3116"
     print('Project coordinates')
     gpdVector = project_epsg_batch([gpsPointsR, geoZonesR], crs)
@@ -111,117 +154,69 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
 
     tracks = gpsPointsNoIndex.track_fid.unique()
 
-    ## 4. Base de datos colectora de bordes
+    ## 4. Definition of dataframe that collects borders
     
     collectorDB = pd.DataFrame({'track_fid': pd.Series([],dtype = 'int'),
                            'rec_orige': pd.Series([],dtype = 'int'),
                            'Sentido': pd.Series([],dtype = 'str'),
                            'rec_destino': pd.Series([],dtype = 'int')})
-    
-    ## 5. Iterar cada track 
+    ## 5. Iterate over tracks 
     countTrack = 0
     
-    for track in tracks:
-                
-        ## Filtrar puntos del track seleccionado
+    for track in tracks:           
+        ## Filter points in the chosen track     
         trackBorderPoints = direction_identificator(gpsPointsNoIndex, track)
-        #pd.concat([collectorDB, trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']]])
-        
+        ## Can we reduce columns in the function??
         collectorDB = pd.concat([collectorDB, trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']]])
-        countTrack =countTrack + 1
-   
-        print('Test')
+        countTrack =countTrack + 1   
     print('{} tracks found in gpx file'.format(countTrack) )    
-    ### Etapa B: Filtrar basado en los puntos de cambio de sentido
-    
-    ## Filtrar zonas que representan los segmentos
+    ## 6. Filter dataframe based on changing points
+    ## Filter zone type segments
     segmentos = geoZones[geoZones ['Tipo']=='Segmento']
-
     minSpeed = velMin
-
-    ## Actualizar cálculo del timestamp en segundos
+    ## Convert time to datetime format
     gpsPointsNoIndex['time']=pd.to_datetime(gpsPointsNoIndex['time'], infer_datetime_format=True)    
-
+    #Calculate time as a second timestamp (int type)
     gpsPointsNoIndex['tiempo_segundos'] = gpsPointsNoIndex[['time']].apply(lambda x: x[0].timestamp(), axis=1).astype(int)
 
-    ## Crear base para compilar los recorridos
-
-## Revisar este bloque, para seleccionar puntos
+    ## Database to compile trips
 
     CompilaRecorridos = pd.DataFrame({'track_fid': pd.Series([], dtype = 'int'),
                                   'track_seg_point_id': pd.Series([], dtype = 'int'),
                                   'time': pd.Series([], dtype = 'str'),
-                                  'ano': pd.Series([], dtype = 'int'),
-                                  'mes': pd.Series([], dtype = 'int'),
-                                  'dia': pd.Series([], dtype = 'int'),
-                                  'hora': pd.Series([], dtype = 'int'),
-                                  'minuto': pd.Series([], dtype = 'int'),
-                                  'segundo': pd.Series([], dtype = 'int'),
                                   'Sentido': pd.Series([], dtype = 'str'),
                                   'Segmento': pd.Series([], dtype = 'str'),
                                   'Modo':pd.Series([], dtype = 'str'),
     })
 
-
-    ## Procesar para cada recorrido los recorridos
+    ## Process each trip 
     viaje = 1
-    print("Loop per each trip")
+    print("Loop per each trip to compute speed")
 
-    for row in collectorDB.iterrows():
-        
-        Track = row[1][0]
-        Sentido = row[1][2]
-        reg_inicio =row[1][4]
-        reg_fin = row[1][5]
-    
-        trip = gpsPointsNoIndex[(gpsPointsNoIndex['track_seg_point_id']>=reg_inicio) & (gpsPointsNoIndex['track_seg_point_id']<=reg_fin) &(gpsPointsNoIndex['track_fid']== Track)]
-        trip['Sentido'] = Sentido
-   
-        tripTagged = gpd.sjoin(trip, segmentos, how = 'left', op ='intersects' )
-
-        # Cálculo de tiempo en cada timestep (el tiempo del timestep i es calculado con el registro anterior)
-        tripTagged['Xi'] = tripTagged.geometry.x
-        tripTagged['Yi'] = tripTagged.geometry.y
-        tripTagged['Xi_1'] = tripTagged.Xi.shift()
-        tripTagged['Yi_1'] = tripTagged.Yi.shift()
-        tripTagged['Time_s'] = tripTagged['tiempo_segundos']-tripTagged['tiempo_segundos'].shift()
-        tripTagged['Time_s_prev'] = tripTagged.tiempo_segundos.shift()
-        tripTagged['Dist_m'] = np.sqrt(pow((tripTagged['Xi']-tripTagged['Xi_1']),2)+pow((tripTagged['Yi']-tripTagged['Yi_1']),2))
-        tripTagged['Distance_meters_original'] = tripTagged['Distance_m_right']
-        
-        tripTagged['Vel_Km_h'] = (tripTagged['Dist_m']/tripTagged['Time_s'])*3.6
-        ## Filter based on a min speed valule
-        tripTagged['No_Recorrido'] = viaje
-        tripTagged['Modo'] = modo
-        filteredSpeedTrip = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
-        #tripTagged = tripTagged[tripTagged['Vel_Km_h'] >= minSpeed]
-    
-        tripShort = filteredSpeedTrip[['track_fid','track_seg_point_id','time','tiempo_segundos','Time_s_prev','Sentido','Nombre_right','Desde_right','Hasta_right','Dist_m','Vel_Km_h','No_Recorrido','Modo','Time_s','Distance_meters_original','geometry','Xi','Yi']]
-        
-        #collectorDB = pd.concat([collectorDB, trackBorderPoints[['track_fid','track_seg_point_id','Sentido','track_seg_point_id_destino']]])
-        CompilaRecorridos = pd.concat([CompilaRecorridos, tripShort])
-        #CompilaRecorridos = CompilaRecorridos.append(tripShort)
+    for row in collectorDB.iterrows():   
+        processedSpeed = calculateSpeed(gpsPointsNoIndex, segmentos, row, viaje, modo, velMin)       
+        CompilaRecorridos = pd.concat([CompilaRecorridos, processedSpeed])
         viaje = viaje+1
+        
     print("{} trips has been processed".format(viaje))
+    
     archivo1 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.csv"
     archivo1gjson = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_cruda.geojson"
-    print("El archivo 1 se guarda como ")
-    print(archivo1)
     CompilaRecorridos.to_csv(archivo1)
     GeoTrack = gpd.GeoDataFrame(CompilaRecorridos, geometry=gpd.points_from_xy(CompilaRecorridos.Xi,CompilaRecorridos.Yi)).set_crs(crs)
-    
     GeoTrack.to_file(archivo1gjson, driver='GeoJSON')
-    
+    print("El archivo 1 se guarda como ")
+    print(archivo1)    
+
     ## Sort and cumsum
     CompilaRecorridos = CompilaRecorridos.sort_values(['No_Recorrido','Nombre_right','Vel_Km_h'], ascending = (True, True, False))
     CompilaRecorridos['CumDistance']=CompilaRecorridos.groupby(['No_Recorrido','Nombre_right'])['Dist_m'].transform(pd.Series.cumsum)
     CompilaRecorridos.to_csv(archivo1)
     CompilaRecorridos = CompilaRecorridos[CompilaRecorridos['CumDistance'] <= CompilaRecorridos['Distance_meters_original']]
-
     archivo2 = proyecto +"/"+ "01_Resultado_"+gpsFilename+"_base_depurada_por_distancia.csv"
     CompilaRecorridos.to_csv(archivo2)
-
-    
+    print("El archivo 1 para seguimiento se guarda como ")
+    print(archivo2) 
     
     # Parte 2, cálculo de velocidades, tiempos y organizar resultados
     
