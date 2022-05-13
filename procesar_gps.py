@@ -279,4 +279,4 @@ def procesarGPS(proyecto, gpsFilename, geoZonesFilename, modo, velMin):
     #tabla
     print("Finalizado correctamente")
 
-procesarGPS("G3_Test","AT_G4_GPS12_08012022_LCR.gpx", "G4_CRS.shp", "Livianos calzada rapida",3)
+#procesarGPS("G3_Test","AT_G4_GPS12_08012022_LCR.gpx", "G4_CRS.shp", "Livianos calzada rapida",3)
