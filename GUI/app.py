@@ -28,3 +28,4 @@ my_map.save('Example.html')
 app = Dash(__name__, external_stylesheets = [dbc.themes.LITERA])
 du.configure_upload(app,folder = r'C:\tmp\uploads' , use_upload_id=True, upload_api=None, http_request_handler=None)
 server = app.server
+

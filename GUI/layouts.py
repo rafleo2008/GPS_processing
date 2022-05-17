@@ -167,10 +167,10 @@ def nav_bar():
             html.H5("Seleccione sistema de zonas"),
 
             du.Upload(id = 'loadZones2',
-                      text = 'Cargue aquí el archivo de zonas, deben ser formato geoJson',
+                      text = 'Cargue aquí las zonas y el archivo gpx, ambos deben estar proyectadas en WGS 84',
                       text_completed = 'Archivo cargado',
-                      filetypes = ["geojson"],
-                      max_files = 1
+                      filetypes = ["geojson", "gpx"],
+                      max_files = 2
                       ),
             html.Hr(),
             html.H5("Seleccione archivo GPX"),
@@ -353,15 +353,32 @@ def func(n_clicks):
     id = "loadZones2"
     )
 def write_filename(status: du.UploadStatus):
-    time.sleep(2)
-    return html.Ul([html.Li(str(status.latest_file))])
+    
+    children = []
+    for status in status.uploaded_files:
+        characters = len(str(status))
+        path = str(status)
+        filetype = path[characters -3 : characters]
+        line = html.Ul([html.Li(str(filetype))])
+        children.append(line)
+    return children
+    #return html.Ul([html.Li(str(status.uploaded_files))])
 @du.callback(
     output = Output("map1", "srcDoc"),
-    id = "loadZones2",
+    #id =(["loadZones2","loadgpx"]),
+    id = "loadZones2"
+    
     )
 def draw_map(status: du.UploadStatus):
     
-    filenames = str(status.latest_file)
+    for status in status.uploaded_files:
+        characters = len(str(status))
+        path = str(status)
+        filetype = path[characters -3: characters]
+        if(filetype == 'son'):
+            geojsonfile = path
+    
+    filenames = str(geojsonfile)
     polygons = gpd.read_file(filenames)
     polygons = polygons.set_crs(epsg =3116, allow_override = True)
     polygons = polygons.to_crs(epsg=4326)
@@ -378,6 +395,7 @@ def draw_map(status: du.UploadStatus):
             geo_j = folium.GeoJson(data = geo_j, style_function = style_function1).add_to(map2)
         else:
             geo_j = folium.GeoJson(data = geo_j, style_function = style_function2).add_to(map2)
+            folium
         
     map2.add_child(folium.LatLngPopup())
     map2.save('zones.html')
@@ -394,6 +412,7 @@ def draw_map(status: du.UploadStatus):
 #    map2.save('zones2.html')
 #    map_export = open('zones2.html', 'r').read()
 #    return(map_export)
+
     
     
 

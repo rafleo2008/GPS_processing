@@ -10,3 +10,8 @@ GUI/zones.html
 *.pyc
 /GUI/__pycache__/
 GUI/__pycache__/app.cpython-38.pyc
+*.pyc
+GUI/__pycache__/layouts.cpython-38.pyc
+GUI/__pycache__/app.cpython-38.pyc
+GUI/Example.html
+GUI/zones.html
