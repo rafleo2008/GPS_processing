@@ -6,3 +6,7 @@ bordes.csv
 test.csv
 /Dual/
 /G3_Test/
+GUI/zones.html
+*.pyc
+/GUI/__pycache__/
+GUI/__pycache__/app.cpython-38.pyc
