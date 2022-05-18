@@ -17,6 +17,14 @@ import time
 import folium
 import geopandas as gpd
 
+### Global variables
+global geojsonLoaded 
+global gpxLoaded 
+
+geojsonLoaded = False
+gpxLoaded = False
+
+
 ### General functions, to be imported from another .py in further development
 
 def calculateCentroid(geodataframe):
@@ -164,7 +172,7 @@ def nav_bar():
                 
                 ]),
             html.Hr(),
-            html.H5("Seleccione sistema de zonas"),
+            html.H5("Seleccione archivos de entrada"),
 
             du.Upload(id = 'loadZones2',
                       text = 'Cargue aquí las zonas y el archivo gpx, ambos deben estar proyectadas en WGS 84',
@@ -173,31 +181,15 @@ def nav_bar():
                       max_files = 2
                       ),
             html.Hr(),
-            html.H5("Seleccione archivo GPX"),
-            du.Upload(id = 'loadgpx',
-                      text = 'Cargue aquí el archivo gpx',
-                      text_completed = 'Archivo cargado',
-                      filetypes = ["gpx"],
-                      max_files = 1
-                      ),
-            html.Hr(),
             html.H5("Opciones de procesamiento"),
             dcc.Checklist(id = 'parameters', 
                           options = [{'label':'Diluir tracks','value':'dissolveTracks'},
                                      {'label':'Eliminar tiempos en ceros','value':'eliminateceropoints'}],
                           value = ['FunctionOptions']),
-            
+            dbc.Button("Borrar cache de archivos",id = 'resetFunction', color ='warning', className= 'me-1'),
             
 
-            dbc.Nav(
-                [
-                    dbc.NavLink("Page1", href="/page1", active = "exact", external_link = "True", className = "btn btn-warning"),
-                    dbc.NavLink("Page2", href="/page2", active = "exact", external_link = "True", className = "btn btn-warning"),
-                    dbc.NavLink("Page3", href="/page3", active = "exact", external_link = "True", className = "btn btn-warning")
-                ],
-                pills = True, 
-                vertical = True
-                )           
+        
             ],
         style = NAVBAR_STYLE,
         className= "card text-white bg-primary mb-3",
@@ -367,9 +359,9 @@ def write_filename(status: du.UploadStatus):
     output = Output("map1", "srcDoc"),
     #id =(["loadZones2","loadgpx"]),
     id = "loadZones2"
-    
     )
 def draw_map(status: du.UploadStatus):
+    
     
     for status in status.uploaded_files:
         characters = len(str(status))
@@ -377,6 +369,20 @@ def draw_map(status: du.UploadStatus):
         filetype = path[characters -3: characters]
         if(filetype == 'son'):
             geojsonfile = path
+            global polygons
+            polygons = gpd.read_file(path)
+            geojsonLoaded = True
+            ## insert map routine for zones
+            
+            
+        if(filetype == 'gpx'):
+            global gpsPoints
+            gpsPoints = gpd.read_file(path, layer = 'track_points')
+            gpxLoaded = True       
+            
+
+    gpxLoaded = False
+            
     
     filenames = str(geojsonfile)
     polygons = gpd.read_file(filenames)
