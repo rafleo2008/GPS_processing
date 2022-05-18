@@ -360,48 +360,81 @@ def write_filename(status: du.UploadStatus):
     #id =(["loadZones2","loadgpx"]),
     id = "loadZones2"
     )
-def draw_map(status: du.UploadStatus):
-    
+def draw_map(status: du.UploadStatus): 
     
     for status in status.uploaded_files:
         characters = len(str(status))
         path = str(status)
         filetype = path[characters -3: characters]
+        map2 = folium.Map()
         if(filetype == 'son'):
             geojsonfile = path
             global polygons
             polygons = gpd.read_file(path)
             geojsonLoaded = True
-            ## insert map routine for zones
+            ## Projection code that define epsg (necessary to redefine all)
+            
+            polygons = polygons.set_crs(epsg =3116, allow_override = True)
+            polygons = polygons.to_crs(epsg=4326)
+            
+            ## Insert map routine for zones
+            
+            x, y, minx, miny, maxx, maxy = calculateCentroid(polygons)
+            #map2 = folium.Map(location = [y, x])
+            map2.location = [y,x]
+            map2.fit_bounds([[miny,minx],[maxy, maxx]])
+            ## Map iterations
+            for _,r in polygons.iterrows():
+                sim_geo = gpd.GeoSeries(r['geometry'])
+                geo_j = sim_geo.to_json()
+                if(r['Tipo'] == 'Borde'):          
+                    geo_j = folium.GeoJson(data = geo_j, style_function = style_function1).add_to(map2)
+                else:
+                    geo_j = folium.GeoJson(data = geo_j, style_function = style_function2).add_to(map2)
+                    folium
             
             
         if(filetype == 'gpx'):
             global gpsPoints
             gpsPoints = gpd.read_file(path, layer = 'track_points')
             gpxLoaded = True       
+            ## Create projection code for define projected epsg
+            
+            ## Insert map routine for gps points
+            x, y, minx, miny, maxx, maxy = calculateCentroid(gpsPoints)
+            #map2 = folium.Map(location = [y,x])
+            map2.location = [y,x]
+            map2.fit_bounds([[miny,minx],[maxy, maxx]])
+            
+            ## Map iterations
+            for _,r in gpsPoints.iterrows():
+                sim_geo = gpd.GeoSeries(r['geometry'])
+                geo_j = sim_geo.to_json()
+                geo_j = folium.GeoJson(data = geo_j).add_to(map2)
+                
+    map2.save('zones.html')
             
 
-    gpxLoaded = False
             
     
-    filenames = str(geojsonfile)
-    polygons = gpd.read_file(filenames)
-    polygons = polygons.set_crs(epsg =3116, allow_override = True)
-    polygons = polygons.to_crs(epsg=4326)
+    #filenames = str(geojsonfile)
+    #polygons = gpd.read_file(filenames)
+    #polygons = polygons.set_crs(epsg =3116, allow_override = True)
+    #polygons = polygons.to_crs(epsg=4326)
     
     ## Calculate centroid for map
-    x, y, minx, miny, maxx, maxy = calculateCentroid(polygons)
+    #x, y, minx, miny, maxx, maxy = calculateCentroid(polygons)
     
-    map2 = folium.Map(location = [y, x])
-    map2.fit_bounds([[miny,minx],[maxy, maxx]])
-    for _,r in polygons.iterrows():
-        sim_geo = gpd.GeoSeries(r['geometry'])
-        geo_j = sim_geo.to_json()
-        if(r['Tipo'] == 'Borde'):          
-            geo_j = folium.GeoJson(data = geo_j, style_function = style_function1).add_to(map2)
-        else:
-            geo_j = folium.GeoJson(data = geo_j, style_function = style_function2).add_to(map2)
-            folium
+    #map2 = folium.Map(location = [y, x])
+    #map2.fit_bounds([[miny,minx],[maxy, maxx]])
+    #for _,r in polygons.iterrows():
+    #    sim_geo = gpd.GeoSeries(r['geometry'])
+    #    geo_j = sim_geo.to_json()
+    #    if(r['Tipo'] == 'Borde'):          
+    #        geo_j = folium.GeoJson(data = geo_j, style_function = style_function1).add_to(map2)
+    #    else:
+    #        geo_j = folium.GeoJson(data = geo_j, style_function = style_function2).add_to(map2)
+    #        folium
         
     map2.add_child(folium.LatLngPopup())
     map2.save('zones.html')
