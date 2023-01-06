@@ -23,7 +23,7 @@ global gpxLoaded
 
 geojsonLoaded = False
 gpxLoaded = False
-
+map2 = folium.Map()
 
 ### General functions, to be imported from another .py in further development
 
@@ -366,7 +366,7 @@ def draw_map(status: du.UploadStatus):
         characters = len(str(status))
         path = str(status)
         filetype = path[characters -3: characters]
-        map2 = folium.Map()
+        
         if(filetype == 'son'):
             geojsonfile = path
             global polygons
@@ -391,7 +391,9 @@ def draw_map(status: du.UploadStatus):
                     geo_j = folium.GeoJson(data = geo_j, style_function = style_function1).add_to(map2)
                 else:
                     geo_j = folium.GeoJson(data = geo_j, style_function = style_function2).add_to(map2)
-                    folium
+                
+            folium.LayerControl().add_to(map2)
+            
             
             
         if(filetype == 'gpx'):
@@ -406,12 +408,15 @@ def draw_map(status: du.UploadStatus):
             map2.location = [y,x]
             map2.fit_bounds([[miny,minx],[maxy, maxx]])
             
-            ## Map iterations
+            ## Map iterations (Customize)
             for _,r in gpsPoints.iterrows():
                 sim_geo = gpd.GeoSeries(r['geometry'])
-                geo_j = sim_geo.to_json()
-                geo_j = folium.GeoJson(data = geo_j).add_to(map2)
-                
+                popupText =  r['time']
+                folium.CircleMarker(location = ([sim_geo.y, sim_geo.x]), tooltip = popupText, radius = 4).add_to(map2)
+                #geo_j = sim_geo.to_json()
+                #geo_j = folium.GeoJson(data = geo_j).add_to(map2)
+                #geo_j = folium.CircleMarker(location = geo_j, radius =5).add_to(map2)
+            folium.LayerControl().add_to(map2)    
     map2.save('zones.html')
             
 
